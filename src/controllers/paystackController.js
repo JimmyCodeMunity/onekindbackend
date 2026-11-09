@@ -1,4 +1,3 @@
-import axios from 'axios';
 import crypto from 'crypto';
 import { Donation } from '../models/Donation.js';
 import { Campaign } from '../models/Campaign.js';
@@ -6,18 +5,21 @@ import { PAYSTACK_SECRET, isPaystackConfigured } from '../config/paystack.js';
 
 const PAYSTACK_BASE = 'https://api.paystack.co';
 
-// Helper: call Paystack API
-async function paystackRequest(method, path, data = {}) {
-  const res = await axios({
+// Helper: call Paystack REST API using native fetch (Node 18+)
+async function paystackRequest(method, path, data = null) {
+  const res = await fetch(`${PAYSTACK_BASE}${path}`, {
     method,
-    url: `${PAYSTACK_BASE}${path}`,
     headers: {
-      Authorization: `Bearer ${PAYSTACK_SECRET}`,
+      Authorization:  `Bearer ${PAYSTACK_SECRET}`,
       'Content-Type': 'application/json',
     },
-    data,
+    ...(data ? { body: JSON.stringify(data) } : {}),
   });
-  return res.data;
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || `Paystack API error ${res.status}`);
+  }
+  return res.json();
 }
 
 // @desc    Initialize a Paystack transaction
