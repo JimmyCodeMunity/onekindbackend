@@ -11,6 +11,7 @@ import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import mongoose from 'mongoose';
 
 import { connectDB } from './config/db.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -89,12 +90,63 @@ app.get('/robots.txt',  (req, res) => {
 });
 
 // ── Health check ─────────────────────────────────────────────────────────────
-app.get('/api/health', (req, res) => {
-  res.json({
-    success:     true,
-    message:     'OneKindAct API is running',
-    environment: process.env.NODE_ENV,
-    timestamp:   new Date().toISOString(),
+app.get('/api/health', async (req, res) => {
+  const start = Date.now();
+
+  // ── DB ping ────────────────────────────────────────────────────────────────
+  let dbStatus  = 'disconnected';
+  let dbLatency = null;
+  let dbName    = null;
+  try {
+    const states = { 0: 'disconnected', 1: 'connected', 2: 'connecting', 3: 'disconnecting' };
+    dbStatus = states[mongoose.connection.readyState] || 'unknown';
+
+    if (mongoose.connection.readyState === 1) {
+      const dbPingStart = Date.now();
+      await mongoose.connection.db.admin().ping();
+      dbLatency = `${Date.now() - dbPingStart}ms`;
+      dbName    = mongoose.connection.name;
+    }
+  } catch (err) {
+    dbStatus = `error: ${err.message}`;
+  }
+
+  // ── Memory ────────────────────────────────────────────────────────────────
+  const mem  = process.memoryUsage();
+  const toMB = (b) => `${(b / 1024 / 1024).toFixed(1)} MB`;
+
+  // ── Integrations ─────────────────────────────────────────────────────────
+  const { isCloudinaryConfigured } = await import('./config/cloudinary.js');
+  const { isStripeConfigured }     = await import('./config/stripe.js');
+  const { isPaystackConfigured }   = await import('./config/paystack.js');
+
+  const healthy = dbStatus === 'connected';
+
+  res.status(healthy ? 200 : 503).json({
+    status:       healthy ? 'healthy' : 'degraded',
+    timestamp:    new Date().toISOString(),
+    responseTime: `${Date.now() - start}ms`,
+    environment:  process.env.NODE_ENV || 'development',
+    version:      process.env.npm_package_version || '1.0.0',
+    uptime:       `${Math.floor(process.uptime())}s`,
+
+    database: {
+      status:  dbStatus,
+      latency: dbLatency,
+      name:    dbName,
+    },
+
+    memory: {
+      rss:       toMB(mem.rss),
+      heapUsed:  toMB(mem.heapUsed),
+      heapTotal: toMB(mem.heapTotal),
+    },
+
+    integrations: {
+      cloudinary: isCloudinaryConfigured ? 'configured' : 'sandbox (local fallback)',
+      stripe:     isStripeConfigured     ? 'configured' : 'sandbox',
+      paystack:   isPaystackConfigured   ? 'configured' : 'sandbox',
+    },
   });
 });
 
