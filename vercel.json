@@ -1,6 +1,7 @@
 {
   "version": 2,
   "name": "onekindact-api",
+  "installCommand": "npm install --legacy-peer-deps",
   "builds": [
     {
       "src": "src/server.js",
