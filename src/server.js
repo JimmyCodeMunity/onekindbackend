@@ -17,7 +17,10 @@ import donationRoutes  from './routes/donationRoutes.js';
 import analyticsRoutes from './routes/analyticsRoutes.js';
 import seoRoutes       from './routes/seoRoutes.js';
 import uploadRoutes    from './routes/uploadRoutes.js';
+import fortpesaRoutes  from './routes/fortpesaRoutes.js';
+import paypalRoutes    from './routes/paypalRoutes.js';
 import { paystackWebhook } from './controllers/paystackController.js';
+import { fortpesaWebhook } from './controllers/fortpesaController.js';
 
 dotenv.config();
 
@@ -55,6 +58,17 @@ app.post(
   paystackWebhook
 );
 
+// Fortpesa webhook — raw body for HMAC signature verification
+app.post(
+  '/api/donations/fortpesa-webhook',
+  express.raw({ type: '*/*' }),
+  (req, res, next) => {
+    if (Buffer.isBuffer(req.body)) req.body = JSON.parse(req.body.toString());
+    next();
+  },
+  fortpesaWebhook
+);
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
@@ -77,6 +91,8 @@ if (!IS_VERCEL) {
 app.use('/api/auth',      authRoutes);
 app.use('/api/campaigns', campaignRoutes);
 app.use('/api/donations', donationRoutes);
+app.use('/api/donations', fortpesaRoutes);
+app.use('/api/donations', paypalRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/seo',       seoRoutes);
 app.use('/api/upload',    uploadRoutes);
